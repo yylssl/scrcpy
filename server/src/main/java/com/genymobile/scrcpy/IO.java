@@ -5,12 +5,32 @@ import android.system.Os;
 import android.system.OsConstants;
 
 import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public final class IO {
     private IO() {
         // not instantiable
+    }
+
+    public static void writeFullyStream(FileDescriptor fd, byte[] buffer, int offset, int len) throws IOException {
+        FileOutputStream fileOutputStream = new FileOutputStream(fd);
+        int writeLen = 0;
+        while (writeLen < len) {
+            try {
+                int w = fileOutputStream.write(buffer, offset + writeLen, len - writeLen);
+                if (BuildConfig.DEBUG && w < 0) {
+                    // w should not be negative, since an exception is thrown on error
+                    throw new AssertionError("FileOutputStream.write() returned a negative value (" + w + ")");
+                }
+                writeLen += w;
+            } catch (ErrnoException e) {
+                if (e.errno != OsConstants.EINTR) {
+                    throw new IOException(e);
+                }
+            }
+        }
     }
 
     public static void writeFully(FileDescriptor fd, ByteBuffer from) throws IOException {
@@ -35,6 +55,10 @@ public final class IO {
     }
 
     public static void writeFully(FileDescriptor fd, byte[] buffer, int offset, int len) throws IOException {
-        writeFully(fd, ByteBuffer.wrap(buffer, offset, len));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.L) {
+            writeFully(fd, ByteBuffer.wrap(buffer, offset, len));
+        } else {
+            writeFullyStream(fd, buffer, offset, len);
+        }
     }
 }
